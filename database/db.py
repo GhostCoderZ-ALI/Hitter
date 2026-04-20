@@ -6,7 +6,7 @@ import os
 from config import FREE_DAILY_LIMIT
 
 MONGO_URL = os.getenv("MONGO_URL", "")
-DB_NAME = os.getenv("DB_NAME", "semex_bot")
+DB_NAME = os.getenv("DB_NAME", "codevenbot")
 
 _client = None
 _db = None
@@ -20,7 +20,44 @@ async def get_db():
         await _ensure_indexes()
     return _db
 
+async def add_credit(user_id, amount):
 
+    db = await get_db()
+
+    await db.wallet.update_one(
+        {"user_id": user_id},
+        {"$inc": {"credits": amount}},
+        upsert=True
+    )
+
+
+async def get_credit(user_id):
+
+    db = await get_db()
+
+    row = await db.wallet.find_one({"user_id": user_id})
+
+    return row["credits"] if row else 0
+
+
+async def add_referral(user_id, inviter):
+
+    db = await get_db()
+
+    exists = await db.referrals.find_one({"user_id": user_id})
+
+    if exists:
+        return False
+
+    await db.referrals.insert_one({
+        "user_id": user_id,
+        "invited_by": inviter
+    })
+
+    await add_credit(inviter,1)
+
+    return True
+    
 async def _ensure_indexes():
     db = _db
     await db.users.create_index("user_id", unique=True)
