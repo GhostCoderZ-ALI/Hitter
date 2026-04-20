@@ -69,7 +69,28 @@ async def cmd_start(msg: Message):
         return
     await _home_screen(msg, msg.from_user)
 
+@router.message(Command("start"))
+async def start(msg: Message, command: CommandObject):
 
+    uid = msg.from_user.id
+
+    inviter = command.args
+
+    await db.upsert_user(uid,msg.from_user.username,msg.from_user.first_name)
+
+    if inviter:
+
+        try:
+
+            inviter = int(inviter)
+
+            if inviter != uid:
+
+                await db.add_referral(uid,inviter)
+
+        except:
+            pass
+            
 @router.callback_query(F.data == "home_main")
 async def cb_home_main(query: CallbackQuery):
     await _home_screen(query.message, query.from_user, edit=True)
