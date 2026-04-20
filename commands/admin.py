@@ -8,6 +8,8 @@ from config import OWNER_IDS
 router = Router()
 
 
+# ADMIN CHECK
+
 async def is_admin(uid):
 
     if uid in OWNER_IDS:
@@ -26,31 +28,27 @@ async def admin_panel(msg: Message):
         return
 
     text = """
-👑 ADMIN CONTROL PANEL
+👑 ADMIN PANEL
 
 User Management
-/ban
-/unban
-/user
-/users
+/ban USER_ID
+/unban USER_ID
+/user USER_ID
 
 Admin Management
-/addadmin
-/removeadmin
+/addadmin USER_ID
+/removeadmin USER_ID
 /admins
 
-Plans
-/setplan
-/upgrade
-/gencode
-/codes
-/revoke
-
-Bot
+Bot Control
+/broadcast TEXT
 /stats
-/broadcast
 /resetstats
-/maintenance
+/maintenance on/off
+
+Commands
+/cmd on command
+/cmd off command
 
 System
 /whoami
@@ -64,9 +62,7 @@ System
 @router.message(Command("whoami"))
 async def whoami(msg: Message):
 
-    uid = msg.from_user.id
-
-    if await is_admin(uid):
+    if await is_admin(msg.from_user.id):
 
         await msg.answer(
             "👑 Admin detected.\n\n"
@@ -82,7 +78,7 @@ async def whoami(msg: Message):
 # ADD ADMIN
 
 @router.message(Command("addadmin"))
-async def add_admin(msg: Message):
+async def addadmin(msg: Message):
 
     if msg.from_user.id not in OWNER_IDS:
         return
@@ -95,13 +91,13 @@ async def add_admin(msg: Message):
 
     await db.add_admin(uid)
 
-    await msg.answer("Admin added.")
+    await msg.answer("✅ Admin added.")
 
 
 # REMOVE ADMIN
 
 @router.message(Command("removeadmin"))
-async def remove_admin(msg: Message):
+async def removeadmin(msg: Message):
 
     if msg.from_user.id not in OWNER_IDS:
         return
@@ -114,7 +110,7 @@ async def remove_admin(msg: Message):
 
     await db.remove_admin(uid)
 
-    await msg.answer("Admin removed.")
+    await msg.answer("✅ Admin removed.")
 
 
 # LIST ADMINS
@@ -127,6 +123,10 @@ async def admins(msg: Message):
 
     admins = await db.get_all_admins()
 
+    if not admins:
+        await msg.answer("No admins found.")
+        return
+
     text = "👑 ADMINS\n\n"
 
     for a in admins:
@@ -135,7 +135,7 @@ async def admins(msg: Message):
     await msg.answer(text)
 
 
-# BAN
+# BAN USER
 
 @router.message(Command("ban"))
 async def ban(msg: Message):
@@ -154,10 +154,10 @@ async def ban(msg: Message):
 
     await db.ban_user(uid)
 
-    await msg.answer("User banned.")
+    await msg.answer("🚫 User banned.")
 
 
-# UNBAN
+# UNBAN USER
 
 @router.message(Command("unban"))
 async def unban(msg: Message):
@@ -173,7 +173,7 @@ async def unban(msg: Message):
 
     await db.unban_user(uid)
 
-    await msg.answer("User unbanned.")
+    await msg.answer("✅ User unbanned.")
 
 
 # USER INFO
@@ -196,7 +196,17 @@ async def user(msg: Message):
         await msg.answer("User not found.")
         return
 
-    await msg.answer(str(info))
+    text = f"""
+USER INFO
+
+ID: {uid}
+Username: {info.get("username")}
+Name: {info.get("first_name")}
+Join: {info.get("join_date")}
+Banned: {info.get("is_banned")}
+"""
+
+    await msg.answer(text)
 
 
 # GLOBAL STATS
@@ -217,7 +227,7 @@ Checks: {s['checks']}
 Charged: {s['charged']}
 Live: {s['live']}
 Banned: {s['banned']}
-Codes: {s['active_codes']}
+Active Codes: {s['active_codes']}
 """
 
     await msg.answer(text)
@@ -233,7 +243,7 @@ async def resetstats(msg: Message):
 
     await db.reset_global_stats()
 
-    await msg.answer("Stats reset.")
+    await msg.answer("⚠️ Global stats reset.")
 
 
 # BROADCAST
@@ -245,7 +255,7 @@ async def broadcast(msg: Message):
         return
 
     try:
-        text = msg.text.split(" ",1)[1]
+        text = msg.text.split(" ", 1)[1]
     except:
         await msg.answer("Usage: /broadcast message")
         return
@@ -262,10 +272,10 @@ async def broadcast(msg: Message):
         except:
             pass
 
-    await msg.answer(f"Broadcast sent to {sent} users.")
+    await msg.answer(f"📢 Broadcast sent to {sent} users.")
 
 
-# MAINTENANCE
+# MAINTENANCE MODE
 
 @router.message(Command("maintenance"))
 async def maintenance(msg: Message):
@@ -279,68 +289,39 @@ async def maintenance(msg: Message):
         await msg.answer("Usage: /maintenance on/off")
         return
 
-    if mode not in ["on","off"]:
+    if mode not in ["on", "off"]:
         await msg.answer("Use on/off")
         return
 
     await db.set_setting("maintenance", mode)
 
-    await msg.answer(f"Maintenance → {mode}")@router.callback_query(F.data == "admin_code")
-async def admin_code(query: CallbackQuery):
-
-    text = """
-🎟 Generate Redeem Code
-
-Send command:
-
-/gencode plan days hits uses
-
-Example:
-/gencode vip 7 100 10
-"""
-
-    await query.message.edit_text(text, reply_markup=admin_kb())
-    await query.answer()
+    await msg.answer(f"⚙️ Maintenance → {mode}")
 
 
-@router.message(Command("gencode"))
-async def gencode(msg: Message):
+# COMMAND ENABLE / DISABLE
 
-    if not is_owner(msg.from_user.id):
+@router.message(Command("cmd"))
+async def cmd_control(msg: Message):
+
+    if msg.from_user.id not in OWNER_IDS:
         return
 
-    try:
-        args = msg.text.split()
+    args = msg.text.split()
 
-        plan = args[1]
-        days = int(args[2])
-        hits = int(args[3])
-        uses = int(args[4])
-
-    except:
-        await msg.answer("Usage:\n/gencode PLAN DAYS HITS USES")
+    if len(args) < 3:
+        await msg.answer("Usage:\n/cmd on command\n/cmd off command")
         return
 
-    code = await db.create_redeem_code(plan, days, hits, uses, msg.from_user.id)
+    mode = args[1]
+    cmd = args[2]
 
-    await msg.answer(f"🎟 Code Generated:\n<code>{code}</code>", parse_mode=ParseMode.HTML)
+    if mode not in ["on", "off"]:
+        await msg.answer("Use on/off")
+        return
 
+    await db.set_setting(f"cmd_{cmd}", mode)
 
-@router.callback_query(F.data == "admin_ban")
-async def admin_ban(query: CallbackQuery):
-
-    text = """
-🚫 Ban User
-
-Send command:
-
-/ban USER_ID
-"""
-
-    await query.message.edit_text(text, reply_markup=admin_kb())
-    await query.answer()
-
-
+    await msg.answer(f"{cmd} command → {mode}")
 @router.message(Command("ban"))
 async def ban_user(msg: Message):
 
