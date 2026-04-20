@@ -52,7 +52,14 @@ async def upsert_user(user_id: int, username: str = None, first_name: str = None
         upsert=True
     )
 
+async def check_delay(user_id):
 
+    db = await get_db()
+
+    row = await db.cooldowns.find_one({"user_id": user_id})
+
+    return row
+    
 async def is_banned(user_id: int) -> bool:
     db = await get_db()
     row = await db.users.find_one({"user_id": user_id}, {"_id": 0, "is_banned": 1})
