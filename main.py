@@ -28,8 +28,9 @@ async def run_bot():
     dp.include_router(main_router)
 
     @dp.error()
-    async def error_handler(update, exception):
-        logger.error(f"Handler error: {exception}", exc_info=True)
+    @dp.error()
+async def error_handler(update: object, exception: Exception):
+    logger.error(f"Handler error: {exception}", exc_info=True)
 
     logger.info(f"Starting {BOT_NAME} bot...")
     try:
