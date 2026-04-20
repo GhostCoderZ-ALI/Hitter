@@ -76,7 +76,25 @@ async def whoami(msg: Message):
 
 
 # ADD ADMIN
+@router.message(Command("cmd"))
+async def command_toggle(msg: Message):
 
+    if msg.from_user.id not in OWNER_IDS:
+        return
+
+    args = msg.text.split()
+
+    if len(args) != 3:
+        await msg.answer("Usage:\n/cmd on command\n/cmd off command")
+        return
+
+    mode = args[1]
+    cmd = args[2]
+
+    await db.set_setting(f"cmd_{cmd}", mode)
+
+    await msg.answer(f"{cmd} command → {mode}")
+    
 @router.message(Command("addadmin"))
 async def addadmin(msg: Message):
 
