@@ -612,7 +612,7 @@ async def ban_user(msg: Message):
 async def admin_unban(query: CallbackQuery):
 
     text = """
-✅ Unban User
+ Unban User
 
 Send command:
 
