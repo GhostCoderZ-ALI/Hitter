@@ -14,10 +14,10 @@ MINI_APP_URL = os.getenv("MINI_APP_URL", "")
 
 BIN_API_URL = "https://bindb.rythampkhandelwal.workers.dev/bin/{bin}"
 
-BOT_NAME = "Gand Lele"
-BOT_USERNAME = "Stealer Hu mai"
-SUPPORT_USERNAME = "@kyahuwagandwe"
-OWNER_USERNAME = "@kyahuwacaras"
+BOT_NAME = "Deven Hitter"
+BOT_USERNAME = "codevenbot"
+SUPPORT_USERNAME = "@hqdeven"
+OWNER_USERNAME = "@hqdeven"
 
 FREE_DAILY_LIMIT = 5
 
