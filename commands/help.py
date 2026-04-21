@@ -1,14 +1,21 @@
-help_text = """
+from aiogram import Router, types
+from aiogram.filters import Command
+
+router = Router()
+
+@router.message(Command("help"))
+async def cmd_help(message: types.Message):
+    help_text = """
 <b>🤖 Working Commands</b>
 
 <b>💰 Card Checkers</b>
 /auth  CC|MM|YY|CVV - Stripe auth checker
-/sh    CC|MM|YY|CVV <site> - Shopify API checker
+/sh    CC|MM|YY|CVV [proxy] - Shopify API checker
 
 <b>🛠️ Other Commands</b>
 /start      - Start the bot
 /gen        - Generate random card
-/hit         - Stripe Checkout Hitter
+/co         - Check card from file
 /proxy      - Manage proxies
 /admin      - Admin commands
 /tempmail   - Generate temporary email
@@ -21,3 +28,4 @@ help_text = """
 <i>Card format: CC|MM|YY|CVV (year can be 2 or 4 digits)</i>
 <i>Bot by @hqdeven</i>
 """
+    await message.answer(help_text, parse_mode="HTML")
