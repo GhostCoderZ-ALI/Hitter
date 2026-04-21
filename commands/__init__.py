@@ -11,15 +11,6 @@ from commands.wallet import router as wallet_router
 from commands.referral import router as ref_router
 from commands.auth import router as auth_router
 from commands.shopify import router as shopify_router
-from commands.b3 import router as b3_router
-from commands.rz import router as rz_router
-from commands.auth1 import router as auth1_router
-from commands.auth2 import router as auth2_router
-from commands.st5 import router as st5_router
-from commands.st1 import router as st1_router
-from commands.adb import router as adb_router
-from commands.cl import router as cl_router
-from commands.help import router as help_router
 
 # Create main router for commands package
 router = Router()
@@ -35,12 +26,3 @@ router.include_router(wallet_router)
 router.include_router(ref_router)
 router.include_router(auth_router)
 router.include_router(shopify_router)
-router.include_router(b3_router)
-router.include_router(rz_router)
-router.include_router(auth1_router)
-router.include_router(auth2_router)
-router.include_router(st5_router)
-router.include_router(st1_router)
-router.include_router(adb_router)
-router.include_router(cl_router)
-router.include_router(help_router)
