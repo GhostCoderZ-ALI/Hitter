@@ -1,29 +1,14 @@
-# commands/help.py
-from aiogram import Router, types
-from aiogram.filters import Command
-
-router = Router()
-
-@router.message(Command("help"))
-async def cmd_help(message: types.Message):
-    help_text = """
-<b>🤖 Available Commands</b>
+help_text = """
+<b>🤖 Working Commands</b>
 
 <b>💰 Card Checkers</b>
-/auth  CC|MM|YY|CVV - Stripe auth (copenhagensilver.com)
-/auth1 CC|MM|YY|CVV - Stripe auth (alternative method)
-/auth2 CC|MM|YY|CVV - Stripe auth (with registration)
-/b3    CC|MM|YY|CVV - Braintree payment method (livresq.com)
-/cl    CC|MM|YY|CVV - Clover payment checker ($1)
-/st1   CC|MM|YY|CVV - Bravehound donation ($1)
-/st5   CC|MM|YY|CVV - Galaxie.com subscription ($5)
+/auth  CC|MM|YY|CVV - Stripe auth checker
 /sh    CC|MM|YY|CVV <site> - Shopify API checker
-/rz    CC|MM|YY|CVV <site> [amount] - Razorpay checker
 
 <b>🛠️ Other Commands</b>
 /start      - Start the bot
 /gen        - Generate random card
-/co         - Check card from file
+/hit         - Stripe Checkout Hitter
 /proxy      - Manage proxies
 /admin      - Admin commands
 /tempmail   - Generate temporary email
@@ -33,7 +18,6 @@ async def cmd_help(message: types.Message):
 <b>ℹ️ Info</b>
 /help       - Show this help message
 
-<i>All card formats: CC|MM|YY|CVV (year can be 2 or 4 digits)</i>
+<i>Card format: CC|MM|YY|CVV (year can be 2 or 4 digits)</i>
 <i>Bot by @hqdeven</i>
 """
-    await message.answer(help_text, parse_mode="HTML")
