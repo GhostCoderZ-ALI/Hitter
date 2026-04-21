@@ -10,3 +10,6 @@ colorama>=0.4.6
 fake-useragent>=1.4.0
 rich>=13.7.0
 aiosqlite>=0.19.0
+curl_cffi>=0.5.0
+faker>=18.0.0
+beautifulsoup4>=4.12.0
