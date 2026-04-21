@@ -1,12 +1,11 @@
 from aiogram import Router
 
-# Working commands
+# Keep only working commands
 from commands.start import router as start_router
-from commands.help import router as help_router
-from commands.auth import router as auth_router      # /auth – Stripe checker
-from commands.shopify import router as shopify_router # /sh – Shopify API checker
+from commands.auth import router as auth_router      # /auth
+from commands.shopify import router as shopify_router # /sh
 
-# Optional – keep these if they work for you (remove if not)
+# Optional helpers (remove if not needed)
 from commands.gen import router as gen_router
 from commands.co import router as co_router
 from commands.proxy import router as proxy_router
@@ -15,16 +14,13 @@ from commands.tempmail import router as temp_router
 from commands.wallet import router as wallet_router
 from commands.referral import router as ref_router
 
-# Create main router
 router = Router()
 
-# Include only working routers
 router.include_router(start_router)
-router.include_router(help_router)
 router.include_router(auth_router)
 router.include_router(shopify_router)
 
-# Optional (keep if they work)
+# Optional
 router.include_router(gen_router)
 router.include_router(co_router)
 router.include_router(proxy_router)
