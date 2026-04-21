@@ -10,8 +10,10 @@ from commands.wallet import router as wallet_router
 from commands.referral import router as ref_router
 from commands.auth import router as auth_router
 from commands.shopify import router as shopify_router
-from commands.b3 import router as b3_router          # <-- add this line
-from commands.auth2 import router as auth2_router
+from commands.b3 import router as b3_router
+from commands.rz import router as rz_router           # <-- add
+from commands.auth1 import router as auth1_router     # <-- add
+from commands.auth2 import router as auth2_router     # <-- add
 
 router = Router()
 
@@ -25,5 +27,7 @@ router.include_router(wallet_router)
 router.include_router(ref_router)
 router.include_router(auth_router)
 router.include_router(shopify_router)
-router.include_router(b3_router)                    # <-- add this line
-router.include_router(auth2_router)
+router.include_router(b3_router)
+router.include_router(rz_router)          # <-- add
+router.include_router(auth1_router)       # <-- add
+router.include_router(auth2_router)       # <-- add
