@@ -1,40 +1,182 @@
-"""Home screen, settings, help, credits, redeem, myhits, ping"""
 import time
-from aiogram import Router, Bot, F
+from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandObject
 
 import database.db as db
 from config import (
-    OWNER_IDS, FREE_DAILY_LIMIT, BOT_NAME, BOT_USERNAME,
-    PLAN_PRICES, SUPPORT_USERNAME, OWNER_USERNAME
+    OWNER_USERNAME,
+    BOT_NAME,
+    FREE_DAILY_LIMIT
 )
-from functions.emojis import EMOJI, EMOJI_PLAIN
-
-_bot_start_time = time.time()
 
 router = Router()
 
-NO_PREVIEW = {"is_disabled": True}
-
-def _kb(*rows):
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=t, callback_data=d) for t, d in row] for row in rows])
+_bot_start_time = time.time()
 
 
-async def _home_screen(target, user, edit=False):
+def build_kb(rows):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t, callback_data=d) for t, d in row]
+            for row in rows
+        ]
+    )
+
+
+async def home_screen(target, user, edit=False):
     uid = user.id
+
     plan = await db.get_user_plan(uid)
 
     if plan["unlimited"]:
         hpd = plan.get("hits_per_day", 0)
         hpd_str = f"{hpd}/day" if hpd > 0 else "Unlimited"
-        plan_line = f"{EMOJI['charged']} <b>{plan['label']}</b> - {hpd_str} - Exp {plan['expiry']}"
+        plan_line = f"Premium • {hpd_str}"
     else:
         hits = await db.get_daily_hits(uid)
         remaining = max(0, FREE_DAILY_LIMIT - hits)
-        plan_line = f"{EMOJI['free']} <b>Free Plan</b> - {hits}/{FREE_DAILY_LIMIT} hits ({remaining} left)"
+        plan_line = f"Free • {hits}/{FREE_DAILY_LIMIT} hits ({remaining} left)"
 
+    fname = user.first_name or "User"
+
+    text = f"""
+╭━━━⚡ <b>{BOT_NAME}</b>
+
+👤 User → <b>{fname}</b>
+💳 Plan → {plan_line}
+
+Use the buttons below.
+
+╰━━━━━━━━━━━━
+"""
+
+    rows = [
+        [("⚡ Start Checking", "home_help")],
+        [("💳 Generate Cards", "home_gen")],
+        [("📊 My Hits", "home_myhits"), ("🏆 Ranking", "home_ranking")],
+        [("📂 Saved BINs", "home_bins"), ("⚙ Settings", "home_settings")],
+        [("📞 Support", "home_contact")]
+    ]
+
+    kb = build_kb(rows)
+
+    if edit:
+        await target.edit_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+    else:
+        await target.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+
+
+@router.message(Command("start"))
+async def cmd_start(msg: Message):
+    uid = msg.from_user.id
+
+    await db.upsert_user(uid, msg.from_user.username, msg.from_user.first_name)
+
+    if await db.is_banned(uid):
+        await msg.answer("🚫 You are banned.")
+        return
+
+    await home_screen(msg, msg.from_user)
+
+
+@router.callback_query(F.data == "home_help")
+async def help_menu(query: CallbackQuery):
+
+    text = """
+⚡ HIT COMMAND
+
+Single card
+/hit <url> cc|mm|yy|cvv
+
+Multiple cards
+/hit <url>
+cc|mm|yy|cvv
+cc|mm|yy|cvv
+
+BIN generation
+/gen <bin> [count]
+
+Tools
+/bin <bin6>
+/myhits
+/redeem <code>
+"""
+
+    kb = build_kb([[("⬅ Back", "home_main")]])
+
+    await query.message.edit_text(text, reply_markup=kb)
+    await query.answer()
+
+
+@router.callback_query(F.data == "home_main")
+async def back_home(query: CallbackQuery):
+    await home_screen(query.message, query.from_user, edit=True)
+    await query.answer()
+
+
+@router.callback_query(F.data == "home_myhits")
+async def myhits(query: CallbackQuery):
+
+    stats = await db.get_user_hit_stats(query.from_user.id)
+
+    text = f"""
+╭━━━📊 MY STATS
+
+Total → {stats['total']}
+Charged → {stats['charged']}
+Live → {stats['live']}
+Declined → {stats['declined']}
+
+╰━━━━━━━━━━━━
+"""
+
+    kb = build_kb([[("⬅ Back", "home_main")]])
+
+    await query.message.edit_text(text, reply_markup=kb)
+    await query.answer()
+
+
+@router.callback_query(F.data == "home_contact")
+async def contact(query: CallbackQuery):
+
+    text = f"""
+📞 SUPPORT
+
+Contact the owner for help.
+
+Owner → {OWNER_USERNAME}
+"""
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Message Owner", url=f"https://t.me/{OWNER_USERNAME.lstrip('@')}")],
+            [InlineKeyboardButton(text="⬅ Back", callback_data="home_main")]
+        ]
+    )
+
+    await query.message.edit_text(text, reply_markup=kb)
+    await query.answer()
+
+
+@router.message(Command("ping"))
+async def ping(msg: Message):
+
+    start = time.time()
+
+    sent = await msg.answer("⚡ Pinging...")
+
+    latency = round((time.time() - start) * 1000)
+
+    uptime_sec = int(time.time() - _bot_start_time)
+
+    hours, rem = divmod(uptime_sec, 3600)
+    mins, secs = divmod(rem, 60)
+
+    uptime = f"{hours}h {mins}m {secs}s"
+
+    await sent.edit_text(f"🏓 Pong\nLatency → {latency}ms\nUptime → {uptime}")
     fname = user.first_name or "User"
     text = (
         f"「 {EMOJI['welcome']} Welcome - {BOT_NAME} 」\n\n"
