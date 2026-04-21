@@ -8,6 +8,7 @@ from commands.admin import router as admin_router
 from commands.tempmail import router as temp_router
 from commands.wallet import router as wallet_router
 from commands.referral import router as ref_router
+from commands.auth import router as auth_router
 
 router = Router()
 
@@ -19,3 +20,4 @@ router.include_router(admin_router)
 router.include_router(temp_router)
 router.include_router(wallet_router)
 router.include_router(ref_router)
+router.include_router(auth_router)
