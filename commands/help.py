@@ -15,7 +15,7 @@ async def cmd_help(message: types.Message):
 <b>🛠️ Other Commands</b>
 /start      - Start the bot
 /gen        - Generate random card
-/co         - Check card from file
+/hit         - Stripe Checkout Hitter
 /proxy      - Manage proxies
 /admin      - Admin commands
 /tempmail   - Generate temporary email
