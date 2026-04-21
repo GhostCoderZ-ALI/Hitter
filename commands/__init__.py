@@ -19,6 +19,7 @@ from commands.st5 import router as st5_router
 from commands.st1 import router as st1_router
 from commands.adb import router as adb_router
 from commands.cl import router as cl_router
+from commands.help import router as help_router
 
 # Create main router for commands package
 router = Router()
@@ -42,3 +43,4 @@ router.include_router(st5_router)
 router.include_router(st1_router)
 router.include_router(adb_router)
 router.include_router(cl_router)
+router.include_router(help_router)
