@@ -9,6 +9,7 @@ from commands.tempmail import router as temp_router
 from commands.wallet import router as wallet_router
 from commands.referral import router as ref_router
 from commands.auth import router as auth_router
+from commands.shopify import router as shopify_router
 
 router = Router()
 
