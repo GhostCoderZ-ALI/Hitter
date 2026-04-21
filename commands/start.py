@@ -208,14 +208,25 @@ async def cb_home_contact(query: CallbackQuery):
     await query.answer()
 
 
-# ==================== UPDATED HELP COMMAND ====================
+# ==================== UPDATED HELP COMMAND (FULL LIST) ====================
 @router.message(Command("help", prefix="/."))
 async def cmd_help(msg: Message):
     text = (
-        f"「 ⚡️ WORKING COMMANDS 」\n\n"
-        f"<code>/auth CC|MM|YY|CVV</code> - Stripe auth checker\n"
-        f"<code>/sh CC|MM|YY|CVV [proxy]</code> - Shopify API checker\n\n"
-        f"Contact: @hqdeven"
+        "「 ⚡️ Deven Hitter COMMANDS 」\n\n"
+        "<code>/hit &lt;url&gt; &lt;card&gt;</code> - Check card\n"
+        "<code>/gen &lt;bin&gt; [count]</code> - Generate cards\n"
+        "<code>/bin &lt;bin6&gt;</code> - BIN lookup\n"
+        "<code>/auth CC|MM|YY|CVV</code> - Stripe auth checker\n"
+        "<code>/sh CC|MM|YY|CVV [proxy]</code> - Shopify API checker\n"
+        "<code>/temp1</code> - Generate temp email (core1)\n"
+        "<code>/temp2</code> - Generate temp email (core2)\n"
+        "<code>/temp3</code> - Generate temp email (core3)\n"
+        "<code>/proxy add/del/test</code> - Proxy management\n"
+        "<code>/myhits</code> - Hit history\n"
+        "<code>/credits</code> - Plan info\n"
+        "<code>/redeem &lt;code&gt;</code> - Redeem code\n"
+        "<code>/ping</code> - Health check\n\n"
+        "Contact: @hqdeven"
     )
     await msg.answer(text, parse_mode=ParseMode.HTML)
 
